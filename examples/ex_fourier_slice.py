@@ -39,25 +39,16 @@ for i in range(len(x)):
 plt.imshow(spiral.cpu())
 plt.title('Spiral Mask')
 plt.show()
+    
 
-image_size = 256
-num_fourier_radial_samples = 1024
 num_fourier_angular_samples = 1440
-
-# Create a FourierSliceForwardProjector module
-theta = torch.linspace(0, 2 * pi, num_fourier_angular_samples)
-num_samples = 1024
-sample_spacing = 1.5*image_size*3/num_fourier_radial_samples # we use 3x zero padding so this is the spacing in resulting fourier space
-
-# Create two separate tensors for the negative and positive ranges
-negative_samples = torch.arange(start=-sample_spacing * (num_samples//2), end=-sample_spacing, step=sample_spacing)
-positive_samples = torch.arange(start=0, end=sample_spacing * (num_samples//2), step=sample_spacing)
-
-# Concatenate the tensors to get the final radius tensor
-radius = torch.cat([negative_samples, positive_samples], dim=0)
+num_fourier_radial_samples = 1024
 
 # we are using an even number of samples, 
-forward_projector = CTProjector_FourierSliceTheorem(3*image_size, 3*image_size, theta, radius).to(device)
+forward_projector = CTProjector_FourierSliceTheorem(spiral.shape, num_fourier_angular_samples, num_fourier_radial_samples)
+
+# move it to the GPU if available
+forward_projector = forward_projector.to(device)
 
 # Apply the forward projector
 y = forward_projector(spiral.unsqueeze(0).unsqueeze(0))
@@ -69,7 +60,7 @@ plt.title('Forward Projection of Spiral Mask')
 plt.show(block=True)
 
 # Apply the inverse projector
-x_inv = forward_projector.inverse(y)
+x_inv = forward_projector.inverse(y, max_iter=40, verbose=True)
 
 # Show the result
 plt.figure()

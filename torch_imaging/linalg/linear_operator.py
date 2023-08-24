@@ -50,6 +50,68 @@ class LinearOperator(torch.nn.Module):
 
         raise NotImplementedError
     
+    def pseudo_inverse_weighted_average(self, x):
+        """
+        This method implements the pseudo inverse of the linear operator using a weighted average.
+
+        parameters:
+            x: torch.Tensor of shape [batch_size, num_channel, *output_shape]
+                The input tensor to the adjoint of the linear operator.
+        returns:
+            adj_result: torch.Tensor of shape [batch_size, num_channel, *input_shape]
+                The result of applying the adjoint of the linear operator to the input tensor.
+        """
+
+        batch_size, num_channel, _ = x.shape
+        
+        numerator = self.adjoint(x)
+        
+        ones_tensor = torch.ones_like(x)
+        denominator = self.adjoint(ones_tensor)
+        
+        return numerator / (denominator + 1e-10)  # Avoid division by zero
+
+    def pseudo_inverse_CG(self, b, max_iter=1000, tol=1e-6, reg_strength=1e-3, verbose=False):
+        """
+        This method implements the pseudo inverse of the linear operator using the conjugate gradient method.
+
+        It solves the linear system (A^T A + reg_strength * I) x = A^T b for x, where A is the linear operator.
+
+        parameters:
+            b: torch.Tensor of shape [batch_size, num_channel, *output_shape]
+                The input tensor to which the pseudo inverse of the linear operator should be applied.
+            max_iter: int
+                The maximum number of iterations to run the conjugate gradient method.
+            tol: float
+                The tolerance for the conjugate gradient method.
+            reg_strength: float
+                The regularization strength for the conjugate gradient method.
+        returns:
+            x_est: torch.Tensor of shape [batch_size, num_channel, *input_shape]
+                The result of applying the adjoint of the linear operator to the input tensor.
+        """
+        ATb = self.adjoint(b)
+        x_est = self.pseudo_inverse_weighted_average(b)
+        
+        r = ATb - self.adjoint(self.forward(x_est)) - reg_strength * x_est
+        p = r.clone()
+        rsold = torch.dot(r.flatten(), r.flatten())
+        
+        for i in range(max_iter):
+            if verbose:
+                print("Inverting ", self.__class__.__name__, " with CG. Iteration: {}, Residual: {}".format(i, torch.sqrt(torch.abs(rsold))))
+            ATAp = self.adjoint(self.forward(p)) + reg_strength * p
+            alpha = rsold / torch.dot(p.flatten(), ATAp.flatten())
+            x_est += alpha * p
+            r -= alpha * ATAp
+            rsnew = torch.dot(r.flatten(), r.flatten())
+            if torch.sqrt(torch.abs(rsnew)) < tol:
+                break
+            p = r + (rsnew / rsold) * p
+            rsold = rsnew
+            
+        return x_est
+    
 
 class SquareLinearOperator(LinearOperator):
     def __init__(self, input_shape):
