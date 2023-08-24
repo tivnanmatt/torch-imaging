@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from . import interpolator
+from .linear_operator import LinearOperator
 
 from matplotlib import pyplot as plt
 
@@ -10,9 +10,9 @@ os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 
 pi = 3.1415927410125732
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-class SparseLinearOperator(nn.Module):
+
+class SparseLinearOperator(LinearOperator):
     def __init__(self, input_shape, output_shape, indices, weights):
         """
         This class implements a sparse linear operator that can be used in a PyTorch model.
@@ -28,13 +28,11 @@ class SparseLinearOperator(nn.Module):
                 The weights of the linear operator.
         """
 
-        super(SparseLinearOperator, self).__init__()
+        super(SparseLinearOperator, self).__init__(input_shape, output_shape)
 
         # Check that indices and weights have the same shape.
         assert indices.shape == weights.shape, "Indices and weights must have the same shape."
         
-        self.input_shape = input_shape
-        self.output_shape = output_shape
         self.indices = indices
         self.weights = weights
 
@@ -155,4 +153,8 @@ class SparseLinearOperator(nn.Module):
             rsold = rsnew
             
         return x_est
+    def to(self, *args, **kwargs):
+        self.indices = self.indices.to(*args, **kwargs)
+        self.weights = self.weights.to(*args, **kwargs)
+        return super().to(*args, **kwargs)
 

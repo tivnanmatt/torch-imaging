@@ -1,6 +1,6 @@
 import torch
 
-from . import SparseLinearOperator
+from .sparse import SparseLinearOperator
 
 class BilinearInterpolator(SparseLinearOperator):
     def __init__(self, num_row, num_col, interp_points, device='cpu'):

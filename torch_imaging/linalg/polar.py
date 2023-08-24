@@ -1,11 +1,14 @@
 
 import torch
 
-from .sparse import SparseLinearOperator
+from .linear_operator import LinearOperator
+from .interp import BilinearInterpolator, LanczosInterpolator
 
-class PolarCoordinateResampler(torch.nn.Module):
-    def __init__(self, num_row, num_col, theta_values, radius_values, interpolator=None):
-        super(PolarCoordinateResampler, self).__init__()
+
+
+class PolarCoordinateResampler(LinearOperator):
+    def __init__(self, input_shape, theta_values, radius_values, interpolator=None):
+        super(PolarCoordinateResampler, self).__init__(input_shape, (len(theta_values), len(radius_values)))
 
         """
         This class implements a polar coordinate transformation that can be used in a PyTorch model.
@@ -21,9 +24,11 @@ class PolarCoordinateResampler(torch.nn.Module):
                 The radius values, in pixels, of the polar grid.
         """
                 
+        assert len(input_shape) == 2, "The input shape must be a tuple of length 2."
+        
         # Store the number of rows and columns
-        self.num_row = num_row
-        self.num_col = num_col
+        self.num_row = input_shape[0]
+        self.num_col = input_shape[1]
 
         # Store the theta and radius values
         self.theta_values = theta_values
@@ -34,8 +39,8 @@ class PolarCoordinateResampler(torch.nn.Module):
         self.num_radius = len(radius_values)
 
         # Calculate the center of the image so that it works for even and odd dimensions
-        row_center = (num_row - 1) // 2
-        col_center = (num_col - 1) // 2
+        row_center = (self.num_row - 1) // 2
+        col_center = (self.num_col - 1) // 2
 
         # Create a meshgrid of theta and radius values
         theta_mesh, radius_mesh = torch.meshgrid(theta_values, radius_values)
@@ -63,7 +68,6 @@ class PolarCoordinateResampler(torch.nn.Module):
             self.interpolator = BilinearInterpolator(self.num_row, self.num_col, interp_points)
         elif interpolator == 'lanczos':
             self.interpolator = LanczosInterpolator(self.num_row, self.num_col, interp_points, kernel_size=5)
-        
 
         # Store shape for reshaping in forward method
         self.theta_mesh = theta_mesh
@@ -119,3 +123,8 @@ class PolarCoordinateResampler(torch.nn.Module):
         result = self.interpolator.pseudo_inverse_CG(flattened, reg_strength=reg_strength, max_iter=max_iter, verbose=verbose)
         
         return result
+    
+    # when .to is called, do the same to the interpolator
+    def to(self, *args, **kwargs):
+        self.interpolator.to(*args, **kwargs)
+        return super().to(*args, **kwargs)

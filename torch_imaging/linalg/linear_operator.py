@@ -1,11 +1,4 @@
-
 import torch
-
-from . import fourier
-from . import polar
-from . import sparse
-from . import interp
-from . import ct_projector
 
 class LinearOperator(torch.nn.Module):
     def __init__(self, input_shape, output_shape):
@@ -273,6 +266,3 @@ class CompositeInvertibleLinearOperator(CompositeLinearOperator, InvertibleLinea
         for operator in reversed(self.operators):
             result = operator.inverse(result)
         return result
-
-
-

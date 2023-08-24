@@ -1,7 +1,10 @@
 import torch
 
+from .polar import PolarCoordinateResampler
 
-class CTProjector_FourierSliceTheorem(nn.Module):
+
+
+class CTProjector_FourierSliceTheorem(torch.nn.Module):
     def __init__(self, num_row, num_col, theta_values, radius_values):
         super(CTProjector_FourierSliceTheorem, self).__init__()
         
@@ -10,7 +13,7 @@ class CTProjector_FourierSliceTheorem(nn.Module):
         self.num_col = num_col
 
         # Create Polar Coordinate Transformation module
-        self.polar_transform = PolarCoordinateTransformation(num_row, num_col, theta_values, radius_values)
+        self.polar_transform = PolarCoordinateResampler((num_row, num_col), theta_values, radius_values)
 
     def forward(self, x):
         # Zero-pad the input image
@@ -53,4 +56,8 @@ class CTProjector_FourierSliceTheorem(nn.Module):
         x = x[:, :, self.num_row//3:-self.num_row//3, self.num_col//3:-self.num_col//3]
 
         return x
+    
+    def to(self, device):
+        self.polar_transform.to(device)
+        return super(CTProjector_FourierSliceTheorem, self).to(device)
     
