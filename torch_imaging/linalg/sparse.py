@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from .linear_operator import LinearOperator
+from .linear_operator import LinearOperator, PseudoInvertibleLinearOperator
 
 from matplotlib import pyplot as plt
 
@@ -12,7 +12,7 @@ pi = 3.1415927410125732
 
 
 
-class SparseLinearOperator(LinearOperator):
+class SparseLinearOperator(PseudoInvertibleLinearOperator):
     def __init__(self, input_shape, output_shape, indices, weights):
         """
         This class implements a sparse linear operator that can be used in a PyTorch model.

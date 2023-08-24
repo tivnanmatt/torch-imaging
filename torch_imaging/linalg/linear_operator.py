@@ -50,67 +50,6 @@ class LinearOperator(torch.nn.Module):
 
         raise NotImplementedError
     
-    def pseudo_inverse_weighted_average(self, x):
-        """
-        This method implements the pseudo inverse of the linear operator using a weighted average.
-
-        parameters:
-            x: torch.Tensor of shape [batch_size, num_channel, *output_shape]
-                The input tensor to the adjoint of the linear operator.
-        returns:
-            adj_result: torch.Tensor of shape [batch_size, num_channel, *input_shape]
-                The result of applying the adjoint of the linear operator to the input tensor.
-        """
-
-        batch_size, num_channel, _ = x.shape
-        
-        numerator = self.adjoint(x)
-        
-        ones_tensor = torch.ones_like(x)
-        denominator = self.adjoint(ones_tensor)
-        
-        return numerator / (denominator + 1e-10)  # Avoid division by zero
-
-    def pseudo_inverse_CG(self, b, max_iter=1000, tol=1e-6, reg_strength=1e-3, verbose=False):
-        """
-        This method implements the pseudo inverse of the linear operator using the conjugate gradient method.
-
-        It solves the linear system (A^T A + reg_strength * I) x = A^T b for x, where A is the linear operator.
-
-        parameters:
-            b: torch.Tensor of shape [batch_size, num_channel, *output_shape]
-                The input tensor to which the pseudo inverse of the linear operator should be applied.
-            max_iter: int
-                The maximum number of iterations to run the conjugate gradient method.
-            tol: float
-                The tolerance for the conjugate gradient method.
-            reg_strength: float
-                The regularization strength for the conjugate gradient method.
-        returns:
-            x_est: torch.Tensor of shape [batch_size, num_channel, *input_shape]
-                The result of applying the adjoint of the linear operator to the input tensor.
-        """
-        ATb = self.adjoint(b)
-        x_est = self.pseudo_inverse_weighted_average(b)
-        
-        r = ATb - self.adjoint(self.forward(x_est)) - reg_strength * x_est
-        p = r.clone()
-        rsold = torch.dot(r.flatten(), r.flatten())
-        
-        for i in range(max_iter):
-            if verbose:
-                print("Inverting ", self.__class__.__name__, " with CG. Iteration: {}, Residual: {}".format(i, torch.sqrt(torch.abs(rsold))))
-            ATAp = self.adjoint(self.forward(p)) + reg_strength * p
-            alpha = rsold / torch.dot(p.flatten(), ATAp.flatten())
-            x_est += alpha * p
-            r -= alpha * ATAp
-            rsnew = torch.dot(r.flatten(), r.flatten())
-            if torch.sqrt(torch.abs(rsnew)) < tol:
-                break
-            p = r + (rsnew / rsold) * p
-            rsold = rsnew
-            
-        return x_est
     
 
 class SquareLinearOperator(LinearOperator):
@@ -191,7 +130,7 @@ class InvertibleLinearOperator(SquareLinearOperator):
     
 
 class PseudoInvertibleLinearOperator(LinearOperator):
-    def __init__(self, input_shape):
+    def __init__(self, input_shape, output_shape):
         """
         This is an abstract class for pseudo-invertible linear operators.
 
@@ -204,21 +143,69 @@ class PseudoInvertibleLinearOperator(LinearOperator):
                 The shape of the input tensor, disregarding batch and channel dimensions.
         """
 
-        super(PseudoInvertibleLinearOperator, self).__init__(input_shape)
-
-    def pseudo_inverse(self, y):
+        super(PseudoInvertibleLinearOperator, self).__init__(input_shape, output_shape)
+    
+    def pseudo_inverse_weighted_average(self, x):
         """
-        This method implements the pseudo-inverse of the linear operator.
+        This method implements the pseudo inverse of the linear operator using a weighted average.
 
         parameters:
-            y: torch.Tensor of shape [batch_size, num_channel, *input_shape]
-                The input tensor to which the pseudo-inverse linear operator should be applied.
+            x: torch.Tensor of shape [batch_size, num_channel, *output_shape]
+                The input tensor to the adjoint of the linear operator.
         returns:
-            result: torch.Tensor of shape [batch_size, num_channel, *input_shape]
-                The result of applying the pseudo-inverse linear operator to the input tensor.
+            adj_result: torch.Tensor of shape [batch_size, num_channel, *input_shape]
+                The result of applying the adjoint of the linear operator to the input tensor.
         """
 
-        raise NotImplementedError
+        batch_size, num_channel, _ = x.shape
+        
+        numerator = self.adjoint(x)
+        
+        ones_tensor = torch.ones_like(x)
+        denominator = self.adjoint(ones_tensor)
+        
+        return numerator / (denominator + 1e-10)  # Avoid division by zero
+
+    def pseudo_inverse(self, b, max_iter=1000, tol=1e-6, reg_strength=1e-3, verbose=False):
+        """
+        This method implements the pseudo inverse of the linear operator using the conjugate gradient method.
+
+        It solves the linear system (A^T A + reg_strength * I) x = A^T b for x, where A is the linear operator.
+
+        parameters:
+            b: torch.Tensor of shape [batch_size, num_channel, *output_shape]
+                The input tensor to which the pseudo inverse of the linear operator should be applied.
+            max_iter: int
+                The maximum number of iterations to run the conjugate gradient method.
+            tol: float
+                The tolerance for the conjugate gradient method.
+            reg_strength: float
+                The regularization strength for the conjugate gradient method.
+        returns:
+            x_est: torch.Tensor of shape [batch_size, num_channel, *input_shape]
+                The result of applying the adjoint of the linear operator to the input tensor.
+        """
+        ATb = self.adjoint(b)
+        x_est = self.pseudo_inverse_weighted_average(b)
+        
+        r = ATb - self.adjoint(self.forward(x_est)) - reg_strength * x_est
+        p = r.clone()
+        rsold = torch.dot(r.flatten(), r.flatten())
+        
+        for i in range(max_iter):
+            if verbose:
+                print("Inverting ", self.__class__.__name__, " with CG. Iteration: {}, Residual: {}".format(i, torch.sqrt(torch.abs(rsold))))
+            ATAp = self.adjoint(self.forward(p)) + reg_strength * p
+            alpha = rsold / torch.dot(p.flatten(), ATAp.flatten())
+            x_est += alpha * p
+            r -= alpha * ATAp
+            rsnew = torch.dot(r.flatten(), r.flatten())
+            if torch.sqrt(torch.abs(rsnew)) < tol:
+                break
+            p = r + (rsnew / rsold) * p
+            rsold = rsnew
+            
+        return x_est
     
 
 
@@ -246,7 +233,7 @@ class CompositeLinearOperator(LinearOperator):
         input_shape = operators[0].input_shape
         output_shape = operators[-1].output_shape
 
-        super(CompositeLinearOperator, self).__init__(input_shape, output_shape)
+        LinearOperator.__init__(self, input_shape, output_shape)
 
         self.operators = operators
 
@@ -320,3 +307,78 @@ class CompositeInvertibleLinearOperator(CompositeLinearOperator, InvertibleLinea
         for operator in reversed(self.operators):
             result = operator.inverse(result)
         return result
+    
+
+
+class CompositePseudoInvertibleLinearOperator(CompositeLinearOperator, InvertibleLinearOperator):
+    def __init__(self, operators):
+        """
+        Represents a composite linear operator where all constituent operators are pseudo-invertible.
+
+        parameters:
+            operators: list of PseudoInvertibleLinearOperator objects
+                The list of linear operators to be composed. All must be pseudo-invertible.
+        """
+
+        # Check that all operators are pseudo-invertible
+        for operator in operators:
+            assert isinstance(operator, PseudoInvertibleLinearOperator) or isinstance(operator, InvertibleLinearOperator), "All operators must be pseudo-invertible."
+
+        super(CompositePseudoInvertibleLinearOperator, self).__init__(operators)
+
+    def pseudo_inverse(self, y, max_iter=1000, tol=1e-6, reg_strength=1e-3, verbose=False):
+        """
+        Implements the pseudo inverse of the composite linear operator.
+
+        parameters:
+            y: torch.Tensor
+                The input tensor to which the pseudo inverse linear operator should be applied.
+            max_iter: int
+                The maximum number of iterations to run the conjugate gradient method.
+            tol: float
+                The tolerance for the conjugate gradient method.
+            reg_strength: float
+                The regularization strength for the conjugate gradient method.
+        returns:
+            result: torch.Tensor
+                The result of applying the pseudo inverse linear operator to the input tensor.
+        """
+
+        result = y
+        # Apply the pseudo inverse of each operator in reverse order
+        for operator in reversed(self.operators):
+            if isinstance(operator, InvertibleLinearOperator):
+                result = operator.inverse(result)
+            else:
+                result = operator.pseudo_inverse(result, max_iter=max_iter, tol=tol, reg_strength=reg_strength, verbose=verbose)
+        return result
+
+    
+
+class UnitaryLinearOperator(InvertibleLinearOperator):
+    def __init__(self, input_shape):
+        """
+        This is an abstract class for unitary linear operators.
+
+        It inherits from InvertibleLinearOperator.
+
+        parameters:
+            input_shape: tuple of integers
+                The shape of the input tensor, disregarding batch and channel dimensions.
+        """
+
+        super(UnitaryLinearOperator, self).__init__(input_shape)
+
+    def inverse(self, y):
+        """
+        This method implements the inverse of the linear operator.
+
+        parameters:
+            y: torch.Tensor of shape [batch_size, num_channel, *input_shape]
+                The input tensor to which the inverse linear operator should be applied.
+        returns:
+            result: torch.Tensor of shape [batch_size, num_channel, *input_shape]
+                The result of applying the inverse linear operator to the input tensor.
+        """
+
+        return self.adjoint(y)

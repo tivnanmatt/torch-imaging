@@ -1,9 +1,9 @@
 
 import torch
 
-from .linear_operator import LinearOperator, InvertibleLinearOperator
+from .linear_operator import LinearOperator, InvertibleLinearOperator, UnitaryLinearOperator
     
-class UnitaryFourierTransform(LinearOperator):
+class UnitaryFourierTransform(UnitaryLinearOperator):
     def __init__(self, input_shape, dim):
         """
         This class implements a N-Dimensional Fourier transform that can be used in a PyTorch model.
@@ -28,7 +28,7 @@ class UnitaryFourierTransform(LinearOperator):
         y_ifft = y_ifft * torch.sqrt(torch.prod(torch.tensor([y.shape[d] for d in self.dim])))
         y_fftshift = torch.fft.fftshift(y_ifft, dim=self.dim)
         return y_fftshift
-
+        
 class FourierFilter2D(InvertibleLinearOperator):
     def __init__(self, input_shape, filter):
         """
@@ -101,5 +101,3 @@ class FourierConvolution1D(InvertibleLinearOperator):
         x_convolved = self.fourier_transform_1d.adjoint(x_filtered)
         return x_convolved
     
-    
-

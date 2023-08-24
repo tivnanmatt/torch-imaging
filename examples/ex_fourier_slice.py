@@ -40,7 +40,7 @@ plt.imshow(spiral.cpu())
 plt.title('Spiral Mask')
 plt.show()
     
-
+# define the number of Fourier domain polar samples to use
 num_fourier_angular_samples = 1440
 num_fourier_radial_samples = 1024
 
@@ -60,7 +60,7 @@ plt.title('Forward Projection of Spiral Mask')
 plt.show(block=True)
 
 # Apply the inverse projector
-x_inv = forward_projector.inverse(y, max_iter=40, verbose=True)
+x_inv = forward_projector.pseudo_inverse(y, max_iter=40, verbose=True)
 
 # Show the result
 plt.figure()

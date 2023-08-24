@@ -1,14 +1,13 @@
 
 import torch
 
-from .linear_operator import LinearOperator
+from .linear_operator import LinearOperator, PseudoInvertibleLinearOperator
 from .interp import BilinearInterpolator, LanczosInterpolator
 
 
-
-class PolarCoordinateResampler(LinearOperator):
+class PolarCoordinateResampler(PseudoInvertibleLinearOperator):
     def __init__(self, input_shape, theta_values, radius_values, interpolator=None):
-        super(PolarCoordinateResampler, self).__init__(input_shape, (len(theta_values), len(radius_values)))
+        super(PseudoInvertibleLinearOperator, self).__init__(input_shape, (len(theta_values), len(radius_values)))
 
         """
         This class implements a polar coordinate transformation that can be used in a PyTorch model.
@@ -99,7 +98,7 @@ class PolarCoordinateResampler(LinearOperator):
         
         return result
 
-    def inverse(self, x, reg_strength=1e-3, max_iter=40, verbose=False):
+    def pseudo_inverse(self, x, **kwargs):
         """
         This method implements the inverse of the polar coordinate transformation.
 
@@ -120,7 +119,7 @@ class PolarCoordinateResampler(LinearOperator):
         flattened = x.view(*x.shape[:2], -1)
         
         # Use the inverse method of the interpolator
-        result = self.interpolator.pseudo_inverse_CG(flattened, reg_strength=reg_strength, max_iter=max_iter, verbose=verbose)
+        result = self.interpolator.pseudo_inverse(flattened, **kwargs)
         
         return result
     
