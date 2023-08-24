@@ -130,14 +130,10 @@ class SquareLinearOperator(LinearOperator):
         super(SquareLinearOperator, self).__init__(input_shape, input_shape)
 
 
-
-
-class SymmetricLinearOperator(SquareLinearOperator):
+class HermitianLinearOperator(SquareLinearOperator):
     def __init__(self, input_shape):
         """
-        This is an abstract class for symmetric linear operators.
-
-        For symmetric linear operators, the adjoint is the same as the forward pass.
+        This is an abstract class for Hermitian, or self-adjoint linear operators.
 
         It inherits from SquareLinearOperator.
 
@@ -146,7 +142,7 @@ class SymmetricLinearOperator(SquareLinearOperator):
                 The shape of the input tensor, disregarding batch and channel dimensions.
         """
 
-        super(SymmetricLinearOperator, self).__init__(input_shape)
+        super(HermitianLinearOperator, self).__init__(input_shape)
 
     def adjoint(self, y: torch.Tensor) -> torch.Tensor:
         """
@@ -162,8 +158,6 @@ class SymmetricLinearOperator(SquareLinearOperator):
 
         return self.forward(y)
     
-
-
 
 class InvertibleLinearOperator(SquareLinearOperator):
     def __init__(self, input_shape):
@@ -291,8 +285,6 @@ class CompositeLinearOperator(LinearOperator):
             adj_result = operator.adjoint(adj_result)
         return adj_result
     
-
-
 
 
 class CompositeInvertibleLinearOperator(CompositeLinearOperator, InvertibleLinearOperator):

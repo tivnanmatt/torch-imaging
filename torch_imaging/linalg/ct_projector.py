@@ -3,6 +3,7 @@ import torch
 pi = 3.1415927410125732
 
 from .polar import PolarCoordinateResampler
+from .fourier import UnitaryFourierTransform
 
 
 
@@ -31,27 +32,29 @@ class CTProjector_FourierSliceTheorem(torch.nn.Module):
             self.theta_values = theta_values
             self.radius_values = radius_values
 
+            # Create 2D Fourier transform module
+            self.fourier_transform_2d = UnitaryFourierTransform((input_shape[0]*3, input_shape[1]*3), dim=(-2, -1))
+
             # Create Polar Coordinate Transformation module
             self.polar_transform = PolarCoordinateResampler((input_shape[0]*3, input_shape[1]*3), theta_values, radius_values)
+
+            # Create 1D Fourier transform module
+            self.fourier_transform_1d = UnitaryFourierTransform((num_fourier_radial_samples,), dim=(-1,))
 
     def forward(self, x):
         # Zero-pad the input image
         x_padded = torch.nn.functional.pad(x, (x.shape[-2], x.shape[-2], x.shape[-1], x.shape[-1]))
 
-        # Compute 2D Fourier transform on the padded image
-        x_fft2 = torch.fft.ifftshift(x_padded, dim=(-2, -1))
-        x_fft2 = torch.fft.fft2(x_fft2, dim=(-2, -1))
-        x_fft2 = torch.fft.fftshift(x_fft2, dim=(-2, -1))
+        # 2D Fourier transform
+        x_fft2 = self.fourier_transform_2d.forward(x_padded)
         
         # Polar coordinate transformation
-        polar_image = self.polar_transform(x_fft2)
+        projections_fft = self.polar_transform(x_fft2)
         
         # 1D Fourier transform along the radial direction
-        polar_image = torch.fft.ifftshift(polar_image, dim=-1)
-        result = torch.fft.ifft(polar_image, dim=-1)
-        result = torch.fft.fftshift(result, dim=-1)
+        projections = self.fourier_transform_1d.adjoint(projections_fft)
 
-        return result
+        return projections
 
     def inverse(self, y, max_iter=50, verbose=False):
 
