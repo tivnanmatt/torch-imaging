@@ -1,9 +1,9 @@
 
 import torch
 
-from .linear_operator import UnitaryLinearOperator
+from .linear_operator import LinearOperator
 
-class Pad(UnitaryLinearOperator):
+class Pad(LinearOperator):
     def __init__(self, input_shape, pad_width, mode='constant', value=0):
         """
         This class implements a padding operator that can be used in a PyTorch model.
@@ -22,3 +22,7 @@ class Pad(UnitaryLinearOperator):
 
     def adjoint(self, y):
         return torch.nn.functional.pad(y, [-self.pad_width[i] for i in range(len(self.pad_width))], mode=self.mode, value=self.value)
+    
+    def pseudo_inverse(self, y, **kwargs):
+        # A^T A is identity, so (A^T A)^-1 A^T is just A^T
+        return self.adjoint(y)

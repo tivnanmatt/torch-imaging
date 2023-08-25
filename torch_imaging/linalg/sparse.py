@@ -7,6 +7,8 @@ from matplotlib import pyplot as plt
 
 import os
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+os.environ['TORCH_USE_CUDA_DSA'] = '1'
+
 
 pi = 3.1415927410125732
 
@@ -92,7 +94,7 @@ class ColSparseLinearOperator(LinearOperator):
         for i in range(self.indices.shape[0]):
             for b in range(batch_size):
                 for c in range(num_channel):
-                    result_flattened[b, c].index_add_(0, self.indices[i], (x_flattened[b, c] * self.weights[i]))
+                    result_flattened[b, c].index_add_(0, self.indices[i].flatten(), (x_flattened[b, c] * self.weights[i].flatten()))
 
         return result
 
@@ -105,7 +107,7 @@ class ColSparseLinearOperator(LinearOperator):
 
 
 
-class RowColSparseLinearOperator(LinearOperator):
+class RowSparseLinearOperator(LinearOperator):
     """
     This class implements a row-column sparse linear operator that can be used in a PyTorch model.
 
@@ -120,7 +122,7 @@ class RowColSparseLinearOperator(LinearOperator):
             The 1D indices of the flattened output tensor that each weight corresponds to.
     """
     def __init__(self, input_shape, output_shape, indices, weights):
-        super(RowColSparseLinearOperator, self).__init__(input_shape, output_shape)
+        super(RowSparseLinearOperator, self).__init__(input_shape, output_shape)
         assert indices.shape == weights.shape, "Indices and weights must have the same shape."
         self.indices = indices
         self.weights = weights
@@ -131,27 +133,34 @@ class RowColSparseLinearOperator(LinearOperator):
 
         result = torch.zeros(batch_size, num_channel, *self.output_shape, dtype=x.dtype, device=x.device)
         
+        results_flattened = result.view(batch_size, num_channel, -1)
         x_flattened = x.view(batch_size, num_channel, -1)
-        
-        for i in range(self.indices.shape[0]):
-            values = self.weights[i].view(1,1,-1)
-            result.index_add_(2, self.indices[i], x_flattened * values)
-
-        return result.view(batch_size, num_channel, *self.output_shape)
-
-    def adjoint(self, y):
-        batch_size, num_channel = y.shape[:2]
-        assert y.shape[2:] == self.output_shape, "Input tensor shape doesn't match the specified output shape."
-        
-        result = torch.zeros(batch_size, num_channel, *self.input_shape, dtype=x.dtype, device=x.device)
-        result_flattened = result.view(batch_size, num_channel, -1)
-        y_flattened = y.view(batch_size, num_channel, -1)
         
         for i in range(self.indices.shape[0]):
             for b in range(batch_size):
                 for c in range(num_channel):
-                    result_flattened[b, c].index_add_(0, self.indices[i], (y_flattened[b, c] * self.weights[i]))
+                    results_flattened[b, c].index_add_(0, self.indices[i].flatten(), (x_flattened[b, c] * self.weights[i].flatten()))
+
+        return result.view(batch_size, num_channel, *self.output_shape)
+
+    def adjoint(self, y):
+
+        batch_size, num_channel = y.shape[:2]
         
+        assert y.shape[2:] == self.output_shape, "Input tensor shape to adjoint doesn't match the specified output_shape of the linear operator."
+
+        result = torch.zeros(batch_size, num_channel, *self.input_shape, dtype=y.dtype, device=y.device)
+        result_flattened = result.view(batch_size, num_channel, -1)
+        
+        # Flatten the input tensor
+        y_flattened = y.view(batch_size, num_channel, -1)
+        
+        for i in range(self.indices.shape[0]):  # Loop over num_weights
+            values = y_flattened[:, :, self.indices[i].flatten()]  # Adding an additional dimension for broadcasting
+            result_flattened += self.weights[i].view(1,1,-1) * values
+
+        result = result_flattened.view(batch_size, num_channel, *self.input_shape)
+
         return result
 
     def to(self, *args, **kwargs):

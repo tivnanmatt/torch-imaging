@@ -1,12 +1,12 @@
 import torch
 
 pi = 3.1415927410125732
-from ..linalg.linear_operator import CompositeLinearOperator
+from ..linalg.linear_operator import CompositeLinearOperator, LinearOperator
 from ..linalg.permute import Pad
 from ..linalg.fourier import FourierTransform
 from ..linalg.polar import PolarCoordinateResampler
 
-from ..linalg.sparse import SparseLinearOperator
+from ..linalg.sparse import RowSparseLinearOperator
 
 class CTProjector_FourierSliceTheorem(CompositeLinearOperator):
     def __init__(self, input_shape, num_fourier_angular_samples, num_fourier_radial_samples, theta_values=None, radius_values=None):
@@ -53,9 +53,16 @@ class CTProjector_FourierSliceTheorem(CompositeLinearOperator):
 
 
 
-class CTProjector_ParallelBeam2D(SparseLinearOperator):
 
-    def __init__(self, Nx, Ny, dx, dy, Nu, du, theta, verbose=False):
+
+
+class CTProjector_ParallelBeam2D(LinearOperator):
+
+    def __init__(self, Nx, Ny, dx, dy, Nu, du, theta, verbose=False, device='cpu'):
+        input_shape = (Ny, Nx)
+        output_shape = (len(theta), Nu)
+        super(CTProjector_ParallelBeam2D, self).__init__(input_shape, output_shape)
+
         self.Nx = Nx
         self.Ny = Ny
         self.dx = dx
@@ -65,38 +72,70 @@ class CTProjector_ParallelBeam2D(SparseLinearOperator):
         self.theta = theta
         self.Ntheta = len(theta)
         self.verbose = verbose
+        self._device = device
 
-        # Precompute indices and weights
-        indices, weights = self._precompute_weights_and_indices()
+    def forward(self, x):
 
-        # Now we initialize the parent class with the indices and weights
-        super(CTProjector_ParallelBeam2D, self).__init__((Nx, Ny), (len(theta), Nu), indices, weights)
-    
-    def _precompute_weights_and_indices(self):
-        all_indices = []
-        all_weights = []
+        batch_size, num_channel = x.shape[:2]
 
-        y = torch.linspace(-(self.Ny-1)/2, (self.Ny-1)/2, self.Ny) * self.dy
-        x = torch.linspace(-(self.Nx-1)/2, (self.Nx-1)/2, self.Nx) * self.dx
-        y2d, x2d = torch.meshgrid(y, x, indexing='ij')
-
+        # This will loop through the views, creating a RowSparseLinearOperator for each view
+        result = torch.zeros([batch_size,num_channel,self.Ntheta, self.Nu], dtype=torch.float32).to(self._device)
         for iTheta, theta_i in enumerate(self.theta):
-            pixel_index, area_between_pixel_trapezoidal_footprint = self._system_response(theta_i, y2d, x2d)
-            num_nonzero_pixels = pixel_index.shape[0]
+            if self.verbose:
+                print('Forward Projecting View : ', iTheta+1, ' of ', self.Ntheta)
+            
+            # Compute the overlap between the voxel trapezoidal footprint and the pixel only for nonzero pixels. 
+            # Return pixel indices and nonzero areas
+            pixel_index, area_between_pixel_trapezoidal_footprint = self._system_response(theta_i, *torch.meshgrid(
+                torch.linspace(-(self.Ny-1)/2, (self.Ny-1)/2, self.Ny, device=self._device) * self.dy,
+                torch.linspace(-(self.Nx-1)/2, (self.Nx-1)/2, self.Nx, device=self._device) * self.dx,
+                indexing='ij'))
+            
+            area_between_pixel_trapezoidal_footprint[pixel_index<0] = 0
+            area_between_pixel_trapezoidal_footprint[pixel_index>=self.Nu] = 0
+            pixel_index[pixel_index<0] = 0
+            pixel_index[pixel_index>=self.Nu] = self.Nu-1
+            
+            operator = RowSparseLinearOperator(self.input_shape, (self.Nu,), pixel_index, area_between_pixel_trapezoidal_footprint)
+            result[:,:,iTheta] = operator.forward(x).squeeze()
+        
+        return result
 
-            # Reshaping to accumulate for all thetas
-            pixel_index_vectors = pixel_index.reshape([num_nonzero_pixels, self.Nx*self.Ny])
-            area_overlap_vectors = area_between_pixel_trapezoidal_footprint.reshape([num_nonzero_pixels, self.Nx*self.Ny])
+    def adjoint(self, y):
 
-            all_indices.append(pixel_index_vectors)
-            all_weights.append(area_overlap_vectors)
+        batch_size, num_channel = y.shape[:2]
 
-        # Concatenate all indices and weights from different views into tensors
-        all_indices = torch.cat(all_indices, dim=0)
-        all_weights = torch.cat(all_weights, dim=0)
+        # This will loop through the views, creating a RowSparseLinearOperator for each view
+        result = torch.zeros([batch_size,num_channel,self.Ny, self.Nx], dtype=torch.float32).to(self._device)
+        for iTheta, theta_i in enumerate(self.theta):
+            if self.verbose:
+                print('Back Projecting View : ', iTheta+1, ' of ', self.Ntheta)
+            
+            # Compute the overlap between the voxel trapezoidal footprint and the pixel only for nonzero pixels. 
+            # Return pixel indices and nonzero areas
+            pixel_index, area_between_pixel_trapezoidal_footprint = self._system_response(theta_i, *torch.meshgrid(
+                torch.linspace(-(self.Ny-1)/2, (self.Ny-1)/2, self.Ny, device=self._device) * self.dy,
+                torch.linspace(-(self.Nx-1)/2, (self.Nx-1)/2, self.Nx, device=self._device) * self.dx,
+                indexing='ij'))
+            
+            area_between_pixel_trapezoidal_footprint[pixel_index<0] = 0
+            area_between_pixel_trapezoidal_footprint[pixel_index>=self.Nu] = 0
+            pixel_index[pixel_index<0] = 0
+            pixel_index[pixel_index>=self.Nu] = self.Nu-1
 
-        return all_indices, all_weights
+            
+            operator = RowSparseLinearOperator(self.input_shape, (self.Nu,), pixel_index, area_between_pixel_trapezoidal_footprint)
+            result[:,:] += operator.adjoint(y[:,:,iTheta]).squeeze()
+        
+        return result
     
+    
+    def _convert_u_to_projection_index(self, u):
+        return (u/self.du) + (self.Nu-1)/2.0
+
+    def _convert_projection_index_to_u(self, projection_index):
+        return (projection_index - (self.Nu-1)/2.0)*self.du
+
     def _system_response(self, theta_i, y2d, x2d):
 
         # compute the projection
@@ -130,8 +169,8 @@ class CTProjector_ParallelBeam2D(SparseLinearOperator):
         u1_index = self._convert_u_to_projection_index(u1)
         u4_index = self._convert_u_to_projection_index(u4)
         num_nonzero_pixels = int(torch.max(torch.ceil(u4_index)-torch.floor(u1_index))) + 1
-        pixel_index = torch.zeros([num_nonzero_pixels, x2d.shape[0], x2d.shape[1]], dtype=torch.long).to(device)
-        area_between_pixel_trapezoidal_footprint = torch.zeros([num_nonzero_pixels, x2d.shape[0], x2d.shape[1]], dtype=torch.float).to(device)
+        pixel_index = torch.zeros([num_nonzero_pixels, x2d.shape[0], x2d.shape[1]], dtype=torch.long).to(self._device)
+        area_between_pixel_trapezoidal_footprint = torch.zeros([num_nonzero_pixels, x2d.shape[0], x2d.shape[1]], dtype=torch.float).to(self._device)
 
         for iPixel in range(num_nonzero_pixels):
             # get the index of the pixel of interest
@@ -153,3 +192,6 @@ class CTProjector_ParallelBeam2D(SparseLinearOperator):
 
         return pixel_index, area_between_pixel_trapezoidal_footprint 
     
+    def to(self, device):
+        self._device = device
+        return self
