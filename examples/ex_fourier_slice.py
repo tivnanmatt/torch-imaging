@@ -11,8 +11,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # now we can import from torch_imaging
-from torch_imaging.linalg.ct_projector import CTProjector_FourierSliceTheorem
-
+from torch_imaging.physics.ct_projector import CTProjector_FourierSliceTheorem
 
 # if the GPU is available, use it
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
@@ -55,8 +54,17 @@ y = forward_projector(spiral.unsqueeze(0).unsqueeze(0))
 
 # Show the result
 plt.figure()
-plt.imshow(y[0, 0].cpu().abs(), aspect='auto')
+plt.imshow(y[0, 0].cpu().real, aspect='auto')
 plt.title('Forward Projection of Spiral Mask')
+plt.show(block=True)
+
+# Apply the backprojector
+x_bp = forward_projector.adjoint(y)
+
+# Show the result
+plt.figure()
+plt.imshow(x_bp[0, 0].cpu().real, aspect='auto')
+plt.title('Back-Projected Spiral Mask')
 plt.show(block=True)
 
 # Apply the inverse projector

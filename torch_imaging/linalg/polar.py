@@ -1,14 +1,12 @@
 
 import torch
 
-from .linear_operator import LinearOperator, PseudoInvertibleLinearOperator
+from .linear_operator import LinearOperator
 from .interp import BilinearInterpolator, LanczosInterpolator
 
 
-class PolarCoordinateResampler(PseudoInvertibleLinearOperator):
+class PolarCoordinateResampler(LinearOperator):
     def __init__(self, input_shape, theta_values, radius_values, interpolator=None):
-        super(PseudoInvertibleLinearOperator, self).__init__(input_shape, (len(theta_values), len(radius_values)))
-
         """
         This class implements a polar coordinate transformation that can be used in a PyTorch model.
 
@@ -22,6 +20,8 @@ class PolarCoordinateResampler(PseudoInvertibleLinearOperator):
             radius_values: torch.Tensor of shape [num_radius]
                 The radius values, in pixels, of the polar grid.
         """
+        output_shape = (len(theta_values), len(radius_values))
+        super(PolarCoordinateResampler, self).__init__(input_shape, output_shape)
                 
         assert len(input_shape) == 2, "The input shape must be a tuple of length 2."
         
@@ -59,9 +59,6 @@ class PolarCoordinateResampler(PseudoInvertibleLinearOperator):
             interpolator = 'lanczos'
         
         assert interpolator in ['bilinear','lanczos'], "The interpolator must be one of 'bilinear', or 'lanczos'."
-        # Create an instance of the BilinearInterpolation module
-        # self.interpolator = BilinearInterpolator(self.num_row, self.num_col, interp_points)
-        # self.interpolator = BicubicInterpolator(self.num_row, self.num_col, interp_points)
 
         if interpolator == 'bilinear':
             self.interpolator = BilinearInterpolator(self.num_row, self.num_col, interp_points)
@@ -71,6 +68,8 @@ class PolarCoordinateResampler(PseudoInvertibleLinearOperator):
         # Store shape for reshaping in forward method
         self.theta_mesh = theta_mesh
         self.radius_mesh = radius_mesh
+
+
         
     def forward(self, x):
         """
@@ -95,6 +94,32 @@ class PolarCoordinateResampler(PseudoInvertibleLinearOperator):
         
         # Reshape to the original theta, r grid
         result = interpolated.view(*interpolated.shape[:2], *self.theta_mesh.shape)
+        
+        return result
+    
+    def adjoint(self, y):
+        """
+        This method implements the adjoint pass of the polar coordinate transformation.
+
+        parameters:
+            y: torch.Tensor of shape [batch_size, num_channel, num_theta, num_radius]
+                The input image to which the adjoint polar coordinate transformation should be applied.
+        returns:
+            result: torch.Tensor of shape [batch_size, num_channel, num_row, num_col]
+                The result of applying the adjoint polar coordinate transformation to the input image.
+        """
+
+        batch_size, num_channel, num_theta, num_radius = y.shape
+
+        # Assert that the number of rows and columns is correct
+        assert num_theta == self.theta_mesh.shape[0], "The number of rows of x does not match the number of rows of the image."
+        assert num_radius == self.radius_mesh.shape[1], "The number of columns of x does not match the number of columns of the image."
+
+        # Flatten the polar image
+        flattened = y.view(*y.shape[:2], -1)
+        
+        # Use the adjoint method of the interpolator
+        result = self.interpolator.adjoint(flattened)
         
         return result
 
@@ -123,7 +148,7 @@ class PolarCoordinateResampler(PseudoInvertibleLinearOperator):
         
         return result
     
-    # when .to is called, do the same to the interpolator
     def to(self, *args, **kwargs):
-        self.interpolator.to(*args, **kwargs)
+        """Override the to method to ensure that the interpolator is moved to the new device."""
+        self.interpolator = self.interpolator.to(*args, **kwargs)
         return super().to(*args, **kwargs)

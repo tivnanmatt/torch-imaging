@@ -55,7 +55,7 @@ plt.imshow(output[0, 0].cpu())
 plt.show()
 
 # Applying the inverse transformation
-inverse_output = cart2pol.inverse(output)
+inverse_output = cart2pol.pseudo_inverse(output, max_iter=100, tol=1e-6, verbose=True)
 
 # Show the output of the inverse transformation
 plt.imshow(inverse_output[0, 0].cpu(),vmin=0,vmax=1)

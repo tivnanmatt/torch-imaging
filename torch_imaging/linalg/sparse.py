@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from .linear_operator import LinearOperator, PseudoInvertibleLinearOperator
+from .linear_operator import LinearOperator
 
 from matplotlib import pyplot as plt
 
@@ -12,7 +12,7 @@ pi = 3.1415927410125732
 
 
 
-class SparseLinearOperator(PseudoInvertibleLinearOperator):
+class SparseLinearOperator(LinearOperator):
     def __init__(self, input_shape, output_shape, indices, weights):
         """
         This class implements a sparse linear operator that can be used in a PyTorch model.
@@ -61,6 +61,8 @@ class SparseLinearOperator(PseudoInvertibleLinearOperator):
             values = x_flattened[:, :, self.indices[i]]  # Adding an additional dimension for broadcasting
             result += self.weights[i].view(1,1,-1) * values
 
+        result = result.view(batch_size, num_channel, *self.output_shape)
+
         return result
 
     def adjoint(self, x):
@@ -71,7 +73,7 @@ class SparseLinearOperator(PseudoInvertibleLinearOperator):
             x: torch.Tensor of shape [batch_size, num_channel, *output_shape]
                 The input tensor to the adjoint of the linear operator.
         returns:
-            adj_result: torch.Tensor of shape [batch_size, num_channel, *input_shape]
+            result: torch.Tensor of shape [batch_size, num_channel, *input_shape]
                 The result of applying the adjoint of the linear operator to the input tensor.
         """
 
@@ -79,18 +81,18 @@ class SparseLinearOperator(PseudoInvertibleLinearOperator):
         
         assert x.shape[2:] == self.output_shape, "Input tensor shape doesn't match the specified output shape."
         
-        adj_result = torch.zeros(batch_size, num_channel, *self.input_shape, dtype=x.dtype, device=x.device)
+        result = torch.zeros(batch_size, num_channel, *self.input_shape, dtype=x.dtype, device=x.device)
         
         # Flatten the adjoint result tensor
-        adj_result_flattened = adj_result.view(batch_size, num_channel, -1)
+        result_flattened = result.view(batch_size, num_channel, -1)
         x_flattened = x.view(batch_size, num_channel, -1)
 
         for i in range(self.indices.shape[0]):
             for b in range(batch_size):
                 for c in range(num_channel):
-                    adj_result_flattened[b, c].index_add_(0, self.indices[i], (x_flattened[b, c] * self.weights[i]))
+                    result_flattened[b, c].index_add_(0, self.indices[i], (x_flattened[b, c] * self.weights[i]))
 
-        return adj_result
+        return result
 
     def to(self, *args, **kwargs):
         self.indices = self.indices.to(*args, **kwargs)

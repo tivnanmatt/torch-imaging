@@ -3,7 +3,7 @@ import torch
 from .sparse import SparseLinearOperator
 
 class BilinearInterpolator(SparseLinearOperator):
-    def __init__(self, num_row, num_col, interp_points, device='cpu'):
+    def __init__(self, num_row, num_col, interp_points):
 
         """
         This class implements a bilinear interpolator that can be used in a PyTorch model.
@@ -51,18 +51,23 @@ class BilinearInterpolator(SparseLinearOperator):
         indices = torch.stack([self._2d_to_1d_indices(self.ix0, self.iy0),
                                self._2d_to_1d_indices(self.ix1, self.iy0),
                                self._2d_to_1d_indices(self.ix0, self.iy1),
-                               self._2d_to_1d_indices(self.ix1, self.iy1)]).to(device)
+                               self._2d_to_1d_indices(self.ix1, self.iy1)])
         
-        weights = torch.stack([self.wa.flatten(), self.wb.flatten(), self.wc.flatten(), self.wd.flatten()]).to(device)
+        weights = torch.stack([self.wa.flatten(), self.wb.flatten(), self.wc.flatten(), self.wd.flatten()])
 
         super(BilinearInterpolator, self).__init__((num_row, num_col), (interp_points.shape[0],), indices, weights)
         
     def _2d_to_1d_indices(self, ix, iy):
         return ix * self.num_col + iy
+    
+    def to(self, *args, **kwargs):
+        """Override the to method to ensure that the a parameter is moved to the new device."""
+        result = super().to(*args, **kwargs)
+        return result
 
 
 class LanczosInterpolator(SparseLinearOperator):
-    def __init__(self, num_row, num_col, interp_points, kernel_size=3, device='cpu'):
+    def __init__(self, num_row, num_col, interp_points, kernel_size=3):
         """
         This class implements the Lanczos interpolation method that can be used in a PyTorch model.
         
@@ -122,7 +127,6 @@ class LanczosInterpolator(SparseLinearOperator):
             # Normalize weights so they sum to one
             sum_weight = weight.sum(dim=0, keepdim=True)
             weights = weight / sum_weight
-            weights = weight.to(device)
 
             # Zero out the weights for OOB points
             weight[oob_mask] = 0
@@ -132,14 +136,13 @@ class LanczosInterpolator(SparseLinearOperator):
             indices_list.append(index)
             weights_list.append(weight)
 
-        indices = torch.stack(indices_list, dim=0).to(device)
-        weights = torch.stack(weights_list, dim=0).to(device)
+        indices = torch.stack(indices_list, dim=0)
+        weights = torch.stack(weights_list, dim=0)
 
         # Normalize weights so they sum to one
         sum_weights = weights.sum(dim=0, keepdim=True)
         sum_weights[sum_weights == 0] = 1e-4
         weights = weights / sum_weights
-        weights = weights.to(device)
         
         super(LanczosInterpolator, self).__init__((num_row, num_col), (interp_points.shape[0],), indices, weights)
 
@@ -161,4 +164,5 @@ class LanczosInterpolator(SparseLinearOperator):
         sinc_x_over_a[torch.isnan(sinc_x_over_a)] = 1
         
         return (sinc_x * sinc_x_over_a) * default_mask + zero_mask
+    
 
