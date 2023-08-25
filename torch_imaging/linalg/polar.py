@@ -2,7 +2,7 @@
 import torch
 
 from .linear_operator import LinearOperator
-from .interp import BilinearInterpolator, LanczosInterpolator
+from .interp import NearestNeighborInterpolator, BilinearInterpolator, LanczosInterpolator 
 
 
 class PolarCoordinateResampler(LinearOperator):
@@ -58,12 +58,17 @@ class PolarCoordinateResampler(LinearOperator):
         if interpolator is None:
             interpolator = 'lanczos'
         
-        assert interpolator in ['bilinear','lanczos'], "The interpolator must be one of 'bilinear', or 'lanczos'."
+        assert interpolator in ['nearest', 'bilinear','lanczos'], "The interpolator must be one of 'nearest', 'bilinear', or 'lanczos'."
 
-        if interpolator == 'bilinear':
+        if interpolator == 'nearest':
+            self.interpolator = NearestNeighborInterpolator(self.num_row, self.num_col, interp_points)
+        elif interpolator == 'bilinear':
             self.interpolator = BilinearInterpolator(self.num_row, self.num_col, interp_points)
         elif interpolator == 'lanczos':
             self.interpolator = LanczosInterpolator(self.num_row, self.num_col, interp_points, kernel_size=5)
+
+        # Store the interp points
+        self.interp_points = interp_points
 
         # Store shape for reshaping in forward method
         self.theta_mesh = theta_mesh

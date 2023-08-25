@@ -14,12 +14,11 @@ from torch_imaging.linalg.polar import PolarCoordinateResampler
 
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
    
-   
 # Testing the PolarCoordinateResampler module
-theta = torch.linspace(0, 2 * pi, 360)
-radius = torch.linspace(-200, 200, 1000)
+theta = torch.linspace(0, 2 * pi, 720)
+radius = torch.linspace(0, 200, 300)
 
-cart2pol = PolarCoordinateResampler((256, 256), theta, radius).to(device)
+cart2pol = PolarCoordinateResampler((256, 256), theta, radius, interpolator='bilinear').to(device)
 
 # now make a (72, 72) x,y coordinate meshgrid
 x_mesh, y_mesh = torch.meshgrid(torch.linspace(-1, 1, 256), torch.linspace(-1, 1, 256))
@@ -41,6 +40,15 @@ for i in range(len(x)):
 plt.imshow(mask.cpu())
 plt.show()
 
+# show the mask
+plt.figure()
+plt.imshow(mask.cpu())
+plt.plot(cart2pol.interp_points[:, 1].cpu(), cart2pol.interp_points[:, 0].cpu(), 'r.')
+plt.xlim([110, 145])
+plt.ylim([110, 145])
+plt.show(block=True)
+
+
 # reshape it to a (1, 1, 72, 72) tensor
 mask = mask.view(1, 1, 256, 256)
 mask = mask.type(torch.float32)
@@ -58,6 +66,7 @@ plt.show()
 inverse_output = cart2pol.pseudo_inverse(output, max_iter=100, tol=1e-6, verbose=True)
 
 # Show the output of the inverse transformation
+plt.figure()
 plt.imshow(inverse_output[0, 0].cpu(),vmin=0,vmax=1)
 plt.show(block=True)
 
