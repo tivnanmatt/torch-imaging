@@ -12,7 +12,9 @@ class Pad(LinearOperator):
 
         it returns the padded input
         """
-        super(Pad, self).__init__(input_shape)
+
+        output_shape = tuple([input_shape[i] + pad_width[i] + pad_width[i + len(input_shape)] for i in range(len(input_shape))])
+        super(Pad, self).__init__(input_shape, output_shape)
         self.pad_width = pad_width
         self.mode = mode
         self.value = value

@@ -44,8 +44,10 @@ num_fourier_angular_samples = 1440
 num_fourier_radial_samples = 1024
 
 # we are using an even number of samples, 
-forward_projector = CTProjector_FourierSliceTheorem(spiral.shape, num_fourier_angular_samples, num_fourier_radial_samples)
-
+forward_projector = CTProjector_FourierSliceTheorem(    spiral.shape, 
+                                                        num_fourier_angular_samples, 
+                                                        num_fourier_radial_samples, 
+                                                        interpolator='lanczos')
 # move it to the GPU if available
 forward_projector = forward_projector.to(device)
 

@@ -7,15 +7,16 @@ from ..linalg.fourier import FourierTransform
 from ..linalg.polar import PolarCoordinateResampler
 
 from ..linalg.sparse import RowSparseLinearOperator
+from ..linalg.misc import RealPart
 
 class CTProjector_FourierSliceTheorem(CompositeLinearOperator):
-    def __init__(self, input_shape, num_fourier_angular_samples, num_fourier_radial_samples, theta_values=None, radius_values=None):
+    def __init__(self, input_shape, num_fourier_angular_samples, num_fourier_radial_samples, theta_values=None, radius_values=None, interpolator=None, pad_factor=1):
 
         if theta_values is None:
             theta_values = torch.linspace(0, 2 * pi, num_fourier_angular_samples)
         if radius_values is None:
-            # we use 3x zero padding so this is the spacing in resulting fourier space
-            sample_spacing = 1.5*3.0*max(input_shape)/num_fourier_radial_samples 
+            # we use  zero padding so this is the spacing in resulting fourier space
+            sample_spacing = 1.5*(1 + 2*pad_factor)*max(input_shape)/num_fourier_radial_samples 
 
             # Create two separate tensors for the negative and positive ranges
             negative_samples = torch.arange(start=-sample_spacing * (num_fourier_radial_samples//2), end=-sample_spacing, step=sample_spacing)
@@ -33,18 +34,24 @@ class CTProjector_FourierSliceTheorem(CompositeLinearOperator):
             self.radius_values = radius_values
 
             # Create a pad operator to zero-pad the input image
-            pad = Pad(input_shape, (input_shape[0], input_shape[0], input_shape[1], input_shape[1]))
+            pad = Pad(input_shape, (pad_factor*input_shape[0], pad_factor*input_shape[0], pad_factor*input_shape[1], pad_factor*input_shape[1]))
 
             # Create 2D Fourier transform module
-            fourier_transform_2d = FourierTransform((input_shape[0]*3, input_shape[1]*3), dim=(-2, -1))
+            fourier_transform_2d = FourierTransform((input_shape[0]*(1 + 2*pad_factor), input_shape[1]*(1 + 2*pad_factor)), dim=(-2, -1))
 
             # Create Polar Coordinate Transformation module
-            polar_transform = PolarCoordinateResampler((input_shape[0]*3, input_shape[1]*3), theta_values, radius_values)
+            polar_transform = PolarCoordinateResampler((input_shape[0]*(1 + 2*pad_factor), input_shape[1]*(1 + 2*pad_factor)), theta_values, radius_values, interpolator=interpolator)
 
             # Create 1D Fourier transform module
             fourier_transform_1d = FourierTransform((num_fourier_radial_samples,), dim=(-1,))
 
-            operators = [pad, fourier_transform_2d, polar_transform, fourier_transform_1d.adjoint_LinearOperator()]
+
+
+            # Create a real part module
+            real_part_1 = RealPart(input_shape)
+            real_part_2 = RealPart((num_fourier_angular_samples, num_fourier_radial_samples))
+
+            operators = [real_part_1, pad, fourier_transform_2d, polar_transform, fourier_transform_1d.adjoint_LinearOperator(), real_part_2]
 
             super(CTProjector_FourierSliceTheorem, self).__init__(operators)
 
